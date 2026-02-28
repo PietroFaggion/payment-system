@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 @Service
 @RequiredArgsConstructor
@@ -42,10 +43,20 @@ public class NotificationServiceImpl implements NotificationService {
             throw new IllegalStateException("Cannot serialize payment notification", e);
         }
 
-        kafkaTemplate.send(
-                paymentNotificationsTopic,
-                String.valueOf(transaction.getSenderAccount().getId()),
-                message
-        );
+        // Block until the broker acknowledges the send so that any failure is thrown
+        // synchronously. This lets the outbox scheduler catch the exception, increment
+        // the retry count, and reschedule the row rather than silently dropping it.
+        try {
+            kafkaTemplate.send(
+                    paymentNotificationsTopic,
+                    String.valueOf(transaction.getSenderAccount().getId()),
+                    message
+            ).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Kafka send interrupted", e);
+        } catch (ExecutionException e) {
+            throw new IllegalStateException("Kafka send failed: " + e.getCause().getMessage(), e);
+        }
     }
 }

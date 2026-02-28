@@ -6,7 +6,9 @@ import com.pietrofaggion.paymentsystem.dto.PaymentRequestDto;
 import com.pietrofaggion.paymentsystem.dto.PaymentResponseDto;
 import com.pietrofaggion.paymentsystem.entity.*;
 import com.pietrofaggion.paymentsystem.exception.AccountNotFoundException;
+import com.pietrofaggion.paymentsystem.exception.CurrencyMismatchException;
 import com.pietrofaggion.paymentsystem.exception.InsufficientFundsException;
+import com.pietrofaggion.paymentsystem.exception.TransactionNotFoundException;
 import com.pietrofaggion.paymentsystem.repository.AccountRepository;
 import com.pietrofaggion.paymentsystem.repository.NotificationOutboxRepository;
 import com.pietrofaggion.paymentsystem.repository.TransactionRepository;
@@ -37,10 +39,25 @@ public class PaymentServiceImpl implements PaymentService {
             return toResponse(existing);
         }
 
-        Account sender = accountRepository.findByIdForUpdate(request.getSenderAccountId())
-                .orElseThrow(() -> new AccountNotFoundException());
-        Account receiver = accountRepository.findById(request.getReceiverAccountId())
-                .orElseThrow(() -> new AccountNotFoundException());
+        Long senderId = request.getSenderAccountId();
+        Long receiverId = request.getReceiverAccountId();
+
+        // Acquire locks in ascending ID order to prevent deadlocks when two concurrent
+        // payments involve the same account pair in opposite directions (A→B and B→A).
+        Long lowId = Math.min(senderId, receiverId);
+        Long highId = Math.max(senderId, receiverId);
+
+        Account first = accountRepository.findByIdForUpdate(lowId)
+                .orElseThrow(AccountNotFoundException::new);
+        Account second = accountRepository.findByIdForUpdate(highId)
+                .orElseThrow(AccountNotFoundException::new);
+
+        Account sender = first.getId().equals(senderId) ? first : second;
+        Account receiver = first.getId().equals(receiverId) ? first : second;
+
+        if (!sender.getCurrency().equals(request.getCurrency())) {
+            throw new CurrencyMismatchException();
+        }
 
         if (sender.getBalance().compareTo(request.getAmount()) < 0) {
             throw new InsufficientFundsException();
@@ -73,6 +90,14 @@ public class PaymentServiceImpl implements PaymentService {
         notificationOutboxRepository.save(outbox);
 
         return toResponse(savedTransaction);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentResponseDto getPaymentById(Long transactionId) {
+        Transaction transaction = transactionRepository.findById(transactionId)
+                .orElseThrow(TransactionNotFoundException::new);
+        return toResponse(transaction);
     }
 
     private String buildOutboxPayload(Transaction transaction) {

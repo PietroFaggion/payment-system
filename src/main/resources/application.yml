@@ -28,6 +28,15 @@ spring:
       pool:
         size: 1
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
 app:
   kafka:
     topics:

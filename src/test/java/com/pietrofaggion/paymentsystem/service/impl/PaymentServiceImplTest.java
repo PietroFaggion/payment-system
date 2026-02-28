@@ -50,8 +50,9 @@ class PaymentServiceImplTest {
         Account receiver = buildAccount(2L, "30.0000");
 
         when(transactionRepository.findByIdempotencyKey(eq(request.getIdempotencyKey()))).thenReturn(Optional.empty());
+        // Both accounts are now locked in ascending ID order (1L first, then 2L).
         when(accountRepository.findByIdForUpdate(eq(1L))).thenReturn(Optional.of(sender));
-        when(accountRepository.findById(eq(2L))).thenReturn(Optional.of(receiver));
+        when(accountRepository.findByIdForUpdate(eq(2L))).thenReturn(Optional.of(receiver));
 
         assertThatThrownBy(() -> paymentService.createPayment(request))
                 .isInstanceOf(InsufficientFundsException.class);

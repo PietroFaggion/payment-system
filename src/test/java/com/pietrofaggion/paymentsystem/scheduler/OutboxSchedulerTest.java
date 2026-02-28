@@ -10,10 +10,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,7 +34,8 @@ class OutboxSchedulerTest {
     @Test
     void processOutboxShouldMarkAsSentWhenNotificationSucceeds() {
         NotificationOutbox row = buildPendingRow(0);
-        when(notificationOutboxRepository.findByStatus(OutboxStatus.PENDING)).thenReturn(List.of(row));
+        when(notificationOutboxRepository.findPendingSkipLocked(eq(OutboxStatus.PENDING), any(Pageable.class)))
+                .thenReturn(List.of(row));
 
         outboxScheduler.processOutbox();
 
@@ -45,7 +49,8 @@ class OutboxSchedulerTest {
     @Test
     void processOutboxShouldIncreaseRetryAndKeepPendingBeforeMaxRetries() {
         NotificationOutbox row = buildPendingRow(1);
-        when(notificationOutboxRepository.findByStatus(OutboxStatus.PENDING)).thenReturn(List.of(row));
+        when(notificationOutboxRepository.findPendingSkipLocked(eq(OutboxStatus.PENDING), any(Pageable.class)))
+                .thenReturn(List.of(row));
         doThrow(new RuntimeException("send failed")).when(notificationService).send(row.getTransaction());
 
         outboxScheduler.processOutbox();
@@ -59,7 +64,8 @@ class OutboxSchedulerTest {
     @Test
     void processOutboxShouldMarkAsFailedAtThirdRetry() {
         NotificationOutbox row = buildPendingRow(2);
-        when(notificationOutboxRepository.findByStatus(OutboxStatus.PENDING)).thenReturn(List.of(row));
+        when(notificationOutboxRepository.findPendingSkipLocked(eq(OutboxStatus.PENDING), any(Pageable.class)))
+                .thenReturn(List.of(row));
         doThrow(new RuntimeException("send failed")).when(notificationService).send(row.getTransaction());
 
         outboxScheduler.processOutbox();

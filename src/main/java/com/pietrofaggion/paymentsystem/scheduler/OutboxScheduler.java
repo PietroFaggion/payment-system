@@ -5,6 +5,7 @@ import com.pietrofaggion.paymentsystem.entity.OutboxStatus;
 import com.pietrofaggion.paymentsystem.repository.NotificationOutboxRepository;
 import com.pietrofaggion.paymentsystem.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,13 +17,18 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OutboxScheduler {
 
+    private static final int BATCH_SIZE = 50;
+
     private final NotificationOutboxRepository notificationOutboxRepository;
     private final NotificationService notificationService;
 
     @Scheduled(fixedDelay = 5000)
     @Transactional
     public void processOutbox() {
-        List<NotificationOutbox> pendingRows = notificationOutboxRepository.findByStatus(OutboxStatus.PENDING);
+        // SKIP LOCKED ensures that rows already claimed by another app instance
+        // are not fetched, preventing duplicate Kafka notifications.
+        List<NotificationOutbox> pendingRows = notificationOutboxRepository
+                .findPendingSkipLocked(OutboxStatus.PENDING, PageRequest.of(0, BATCH_SIZE));
 
         for (NotificationOutbox row : pendingRows) {
             try {

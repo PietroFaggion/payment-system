@@ -24,5 +24,11 @@ public class PaymentRequestDto {
     private String currency;
 
     @NotBlank
+    @Size(max = 255)
     private String idempotencyKey;
+
+    @AssertFalse(message = "Sender and receiver accounts must be different")
+    public boolean isSelfTransfer() {
+        return senderAccountId != null && senderAccountId.equals(receiverAccountId);
+    }
 }
