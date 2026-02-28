@@ -59,7 +59,7 @@ class OutboxRetryIntegrationTest {
     private OutboxScheduler outboxScheduler;
 
     // Replace the real NotificationService so Kafka send behaviour is fully controlled.
-    @MockBean
+    @MockitoBean
     private NotificationService notificationService;
 
     @BeforeEach
