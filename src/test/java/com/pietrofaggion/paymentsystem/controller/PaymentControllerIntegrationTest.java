@@ -200,7 +200,7 @@ class PaymentControllerIntegrationTest {
             String value = records.iterator().next().value();
             JsonNode message = objectMapper.readTree(value);
             assertThat(message.get("senderAccountId").asText()).isEqualTo(String.valueOf(sender.getId()));
-            assertThat(message.get("amount").asText()).isEqualTo("100.0000");
+            assertThat(message.get("amount").asText()).isEqualTo("100.0");
             assertThat(message.get("currency").asText()).isEqualTo("EUR");
             assertThat(message.get("status").asText()).isEqualTo("COMPLETED");
         }

@@ -1,9 +1,12 @@
 package com.pietrofaggion.paymentsystem.exception;
 
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.transaction.TransactionSystemException;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -53,21 +56,35 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "Concurrent modification detected, please retry");
     }
 
+    @ExceptionHandler({PessimisticLockingFailureException.class, CannotAcquireLockException.class})
+    public ResponseEntity<ApiError> handlePessimisticLock(Exception ex) {
+        return build(HttpStatus.CONFLICT, "Concurrent modification detected, please retry");
+    }
+
     @ExceptionHandler({DataIntegrityViolationException.class, org.hibernate.exception.ConstraintViolationException.class})
     public ResponseEntity<ApiError> handleDataIntegrityViolation(Exception ex) {
-        // Walk the cause chain looking for a ConstraintViolationException so we can
-        // use getConstraintName() instead of fragile message-string matching.
+        // Walk the cause chain looking for idempotency key constraint violations.
+        // Check constraint name first (PostgreSQL), then fall back to message matching (H2).
         Throwable cause = ex;
         while (cause != null) {
             if (cause instanceof org.hibernate.exception.ConstraintViolationException cve) {
-                if ("transactions_idempotency_key_uk".equals(cve.getConstraintName())) {
+                String constraintName = cve.getConstraintName();
+                if (constraintName != null && constraintName.toLowerCase().contains("idempotency_key")) {
                     return build(HttpStatus.CONFLICT, "Duplicated idempotency key");
                 }
-                return build(HttpStatus.INTERNAL_SERVER_ERROR, "Data integrity violation");
+            }
+            String msg = cause.getMessage();
+            if (msg != null && msg.toLowerCase().contains("idempotency_key")) {
+                return build(HttpStatus.CONFLICT, "Duplicated idempotency key");
             }
             cause = cause.getCause();
         }
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Data integrity violation");
+    }
+
+    @ExceptionHandler(TransactionSystemException.class)
+    public ResponseEntity<ApiError> handleTransactionSystem(TransactionSystemException ex) {
+        return build(HttpStatus.CONFLICT, "Concurrent modification detected, please retry");
     }
 
     private ResponseEntity<ApiError> build(HttpStatus status, String message) {
