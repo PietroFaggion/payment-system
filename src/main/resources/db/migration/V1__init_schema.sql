@@ -125,7 +125,7 @@ CREATE TABLE notification_outbox (
 COMMENT ON TABLE notification_outbox IS 'Outbox records for notification delivery';
 COMMENT ON COLUMN notification_outbox.id IS 'PK: surrogate identifier for outbox message';
 COMMENT ON COLUMN notification_outbox.transaction_id IS 'FK to transaction';
-COMMENT ON COLUMN notification_outbox.status IS 'Outbox status (PENDING/SENT/FAILED)';
+COMMENT ON COLUMN notification_outbox.status IS 'Outbox status (PENDING/PROCESSING/SENT/FAILED)';
 COMMENT ON COLUMN notification_outbox.payload IS 'Serialized notification payload';
 COMMENT ON COLUMN notification_outbox.created_at IS 'Audit: creation timestamp in UTC';
 COMMENT ON COLUMN notification_outbox.sent_at IS 'Timestamp when notification was sent';
@@ -138,7 +138,7 @@ ALTER TABLE notification_outbox
     ADD CONSTRAINT notification_outbox_transaction_fk FOREIGN KEY (transaction_id)
         REFERENCES transactions (id);
 ALTER TABLE notification_outbox
-    ADD CONSTRAINT notification_outbox_status_ck CHECK (status IN ('PENDING', 'SENT', 'FAILED'));
+    ADD CONSTRAINT notification_outbox_status_ck CHECK (status IN ('PENDING', 'PROCESSING', 'SENT', 'FAILED'));
 ALTER TABLE notification_outbox
     ADD CONSTRAINT notification_outbox_retry_count_ck CHECK (retry_count >= 0);
 

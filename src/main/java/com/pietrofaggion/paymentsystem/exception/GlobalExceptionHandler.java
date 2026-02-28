@@ -55,17 +55,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({DataIntegrityViolationException.class, org.hibernate.exception.ConstraintViolationException.class})
     public ResponseEntity<ApiError> handleDataIntegrityViolation(Exception ex) {
-        StringBuilder builder = new StringBuilder();
-        Throwable current = ex;
-        while (current != null) {
-            if (current.getMessage() != null) {
-                builder.append(current.getMessage().toLowerCase()).append(" ");
+        // Walk the cause chain looking for a ConstraintViolationException so we can
+        // use getConstraintName() instead of fragile message-string matching.
+        Throwable cause = ex;
+        while (cause != null) {
+            if (cause instanceof org.hibernate.exception.ConstraintViolationException cve) {
+                if ("transactions_idempotency_key_uk".equals(cve.getConstraintName())) {
+                    return build(HttpStatus.CONFLICT, "Duplicated idempotency key");
+                }
+                return build(HttpStatus.INTERNAL_SERVER_ERROR, "Data integrity violation");
             }
-            current = current.getCause();
-        }
-        String message = builder.toString();
-        if (message.contains("idempotency_key")) {
-            return build(HttpStatus.CONFLICT, "Duplicated idempotency key");
+            cause = cause.getCause();
         }
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Data integrity violation");
     }

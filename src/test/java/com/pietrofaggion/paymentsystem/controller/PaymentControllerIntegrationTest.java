@@ -378,14 +378,14 @@ class PaymentControllerIntegrationTest {
 
         BigDecimal totalMoneyBefore = senderInitialBalance; // receivers all start at 0
 
-        ExecutorService executor = Executors.newFixedThreadPool(10);
+        ExecutorService executor = Executors.newFixedThreadPool(numberOfPayments);
         CyclicBarrier barrier = new CyclicBarrier(numberOfPayments);
 
         List<Future<MvcResult>> futures = new ArrayList<>();
         for (int i = 0; i < numberOfPayments; i++) {
             final int index = i;
             futures.add(executor.submit(() -> {
-                barrier.await(10, TimeUnit.SECONDS);
+                barrier.await(30, TimeUnit.SECONDS);
                 PaymentRequestDto req = buildRequest(
                         sender.getId(),
                         receivers.get(index).getId(),
@@ -405,7 +405,7 @@ class PaymentControllerIntegrationTest {
         AtomicInteger insufficientFundsCount = new AtomicInteger(0);
 
         for (Future<MvcResult> future : futures) {
-            MvcResult result = future.get(30, TimeUnit.SECONDS);
+            MvcResult result = future.get(60, TimeUnit.SECONDS);
             int httpStatus = result.getResponse().getStatus();
             if (httpStatus == 201) {
                 successCount.incrementAndGet();

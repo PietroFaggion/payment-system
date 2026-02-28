@@ -1,8 +1,12 @@
 package com.pietrofaggion.paymentsystem.service;
 
-import com.pietrofaggion.paymentsystem.entity.Transaction;
-
 public interface NotificationService {
 
-    void send(Transaction transaction);
+    /**
+     * Publishes a pre-serialized notification payload to Kafka.
+     *
+     * @param payload   the JSON string already stored in the outbox row
+     * @param kafkaKey  the Kafka partition key (sender account ID as string)
+     */
+    void send(String payload, String kafkaKey);
 }
