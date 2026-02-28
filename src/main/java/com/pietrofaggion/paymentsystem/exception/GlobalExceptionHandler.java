@@ -51,6 +51,11 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, message);
     }
 
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ApiError> handleIdempotencyConflict(IdempotencyConflictException ex) {
+        return build(HttpStatus.CONFLICT, "Idempotency key reused with different payment parameters");
+    }
+
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<ApiError> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
         return build(HttpStatus.CONFLICT, "Concurrent modification detected, please retry");

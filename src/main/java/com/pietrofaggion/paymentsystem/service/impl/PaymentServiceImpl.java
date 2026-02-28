@@ -7,6 +7,7 @@ import com.pietrofaggion.paymentsystem.dto.PaymentResponseDto;
 import com.pietrofaggion.paymentsystem.entity.*;
 import com.pietrofaggion.paymentsystem.exception.AccountNotFoundException;
 import com.pietrofaggion.paymentsystem.exception.CurrencyMismatchException;
+import com.pietrofaggion.paymentsystem.exception.IdempotencyConflictException;
 import com.pietrofaggion.paymentsystem.exception.InsufficientFundsException;
 import com.pietrofaggion.paymentsystem.exception.TransactionNotFoundException;
 import com.pietrofaggion.paymentsystem.repository.AccountRepository;
@@ -35,7 +36,16 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentResponseDto createPayment(PaymentRequestDto request) {
         Transaction existing = transactionRepository.findByIdempotencyKey(request.getIdempotencyKey())
                 .orElse(null);
+
+        // the idea is to return an exception if a fraudulent attempt is made to reuse an idempotency key with different payment parameters,
+        //  but allow repeated requests with exactly the same parameters to succeed without creating duplicate transactions
         if (existing != null) {
+            if (!existing.getSenderAccount().getId().equals(request.getSenderAccountId())
+                    || !existing.getReceiverAccount().getId().equals(request.getReceiverAccountId())
+                    || existing.getAmount().compareTo(request.getAmount()) != 0
+                    || !existing.getCurrency().equals(request.getCurrency())) {
+                throw new IdempotencyConflictException();
+            }
             return toResponse(existing);
         }
 

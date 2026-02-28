@@ -6,6 +6,7 @@ import com.pietrofaggion.paymentsystem.dto.PaymentResponseDto;
 import com.pietrofaggion.paymentsystem.entity.Account;
 import com.pietrofaggion.paymentsystem.entity.Transaction;
 import com.pietrofaggion.paymentsystem.entity.TransactionStatus;
+import com.pietrofaggion.paymentsystem.exception.IdempotencyConflictException;
 import com.pietrofaggion.paymentsystem.exception.InsufficientFundsException;
 import com.pietrofaggion.paymentsystem.repository.AccountRepository;
 import com.pietrofaggion.paymentsystem.repository.NotificationOutboxRepository;
@@ -83,6 +84,32 @@ class PaymentServiceImplTest {
 
         assertThat(response.getTransactionId()).isEqualTo(99L);
         assertThat(response.getStatus()).isEqualTo(TransactionStatus.COMPLETED);
+        verifyNoInteractions(accountRepository);
+        verify(transactionRepository, never()).save(any(Transaction.class));
+        verifyNoInteractions(notificationOutboxRepository);
+    }
+
+    @Test
+    void createPaymentShouldThrowWhenIdempotencyKeyReusedWithDifferentParameters() {
+        PaymentRequestDto request = buildRequest();
+        Account sender = buildAccount(1L, "100.0000");
+        Account receiver = buildAccount(2L, "30.0000");
+
+        Transaction existing = new Transaction();
+        existing.setId(99L);
+        existing.setSenderAccount(sender);
+        existing.setReceiverAccount(receiver);
+        existing.setAmount(new BigDecimal("999.0000")); // different amount
+        existing.setCurrency(request.getCurrency());
+        existing.setIdempotencyKey(request.getIdempotencyKey());
+        existing.setStatus(TransactionStatus.COMPLETED);
+
+        when(transactionRepository.findByIdempotencyKey(eq(request.getIdempotencyKey())))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> paymentService.createPayment(request))
+                .isInstanceOf(IdempotencyConflictException.class);
+
         verifyNoInteractions(accountRepository);
         verify(transactionRepository, never()).save(any(Transaction.class));
         verifyNoInteractions(notificationOutboxRepository);

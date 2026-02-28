@@ -1,9 +1,52 @@
 # Payment System
 
-Spring Boot payment service with:
-- PostgreSQL for accounts/transactions/outbox persistence
-- Kafka for notification delivery
-- Transactional outbox pattern for reliable async publishing
+Spring Boot payment service built for reliability and correctness.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | Java 21, Spring Boot 3 |
+| Persistence | PostgreSQL + JPA/Hibernate, Flyway |
+| Messaging | Apache Kafka |
+| Docs | SpringDoc OpenAPI (Swagger UI) |
+| Observability | Spring Boot Actuator |
+
+## Features
+
+### Transactional payment processing
+Each payment is executed in a single database transaction: balance check, sender debit, receiver credit, and outbox row creation either all succeed or all roll back.
+
+### Concurrency safety
+Both accounts are pessimistically locked (`SELECT FOR UPDATE`) in ascending ID order before any balance is touched, preventing deadlocks and double-spending. The `Account` entity also carries an optimistic-lock version column as a secondary guard.
+
+### Idempotency
+Every request carries an `idempotencyKey`. A unique DB constraint ensures a duplicate request is rejected with HTTP 409 rather than applied twice.
+
+### Transactional outbox pattern
+A `NotificationOutbox` row is written atomically with the transaction record. A background scheduler delivers it to Kafka asynchronously, so a broker outage never blocks or fails a payment.
+
+### Safe multi-instance outbox delivery
+The scheduler claims rows with `SELECT FOR UPDATE SKIP LOCKED` and marks them `PROCESSING` before releasing the lock. Other app instances skip those rows, preventing duplicate Kafka messages when multiple replicas run concurrently.
+
+### Retry and failure handling
+Failed Kafka sends are retried up to three times (`retryCount` tracked per row). After three failures the row is marked `FAILED`. The producer is configured with `enable.idempotence=true` and `acks=all`.
+
+### Validation
+- Self-transfer rejected (sender ≠ receiver)
+- Currency must match the sender account's currency
+- Amount must be positive, all fields required
+- Errors return a structured `ApiError` with an appropriate HTTP status
+
+## API
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/payments` | Create a payment — returns `201 Created` with `Location` header |
+| `GET` | `/payments/{id}` | Retrieve a payment by transaction ID |
+
+Interactive docs: `http://localhost:8080/swagger-ui.html`
+Health probe: `http://localhost:8080/actuator/health`
 
 ## Prerequisites
 
@@ -11,166 +54,22 @@ Spring Boot payment service with:
 - Java 21
 - Maven 3.9+
 
-## 1. Infrastructure Setup
-
-From project root:
+## Running locally
 
 ```bash
+# 1. Start infrastructure
 docker compose up -d
-```
 
-Expected services:
-- `zookeeper`
-- `kafka`
-- `schema-registry`
-- `kafka-init` (runs once and exits 0 after topic creation)
-- `postgres`
-
-Quick checks:
-
-```bash
-docker exec -it kafka kafka-topics --bootstrap-server localhost:9092 --list
-curl http://localhost:8081/subjects
-docker exec -it postgres psql -U payments_user -d payments_db -c "\dt"
-```
-
-Notes:
-- Postgres host port is `5433` (mapped to container `5432`).
-- Kafka topic `payment-notifications` is created by `kafka-init`.
-
-## 2. Application Configuration
-
-The app reads environment defaults from `src/main/resources/application.yml`:
-- DB: `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`
-- Kafka broker: `KAFKA_BROKER_PORT`
-
-Default local values match `.env` used by Docker Compose.
-
-## 3. Run the Application
-
-From project root:
-
-```bash
+# 2. Run the application (Flyway migrations apply automatically)
 mvn spring-boot:run
 ```
 
-If you use wrapper in your environment:
-
-```bash
-./mvnw spring-boot:run
-```
-
-Flyway runs automatically at startup and applies:
-- `src/main/resources/db/migration/V1__init_schema.sql`
-
-## 4. Main API
-
-### Create payment
-
-`POST /payments`
-
-Request body:
-
-```json
-{
-  "senderAccountId": 1,
-  "receiverAccountId": 2,
-  "amount": 25.0000,
-  "currency": "EUR",
-  "idempotencyKey": "idem-123"
-}
-```
-
-Example:
-
-```bash
-curl -X POST http://localhost:8080/payments \
-  -H "Content-Type: application/json" \
-  -d '{"senderAccountId":1,"receiverAccountId":2,"amount":25.0000,"currency":"EUR","idempotencyKey":"idem-123"}'
-```
-
-## Implementation Overview
-
-### Payment flow (synchronous)
-
-Entry point:
-- `src/main/java/com/pietrofaggion/paymentsystem/controller/PaymentController.java`
-
-Core transactional logic:
-- `src/main/java/com/pietrofaggion/paymentsystem/service/impl/PaymentServiceImpl.java`
-
-Key behaviors:
-- Idempotency check by `idempotencyKey`
-- Pessimistic lock on sender account (`findByIdForUpdate`)
-- Balance validation
-- Sender debit + receiver credit
-- Transaction persistence (`COMPLETED`)
-- Outbox row creation (`PENDING`) with JSON payload
-
-### Outbox delivery (asynchronous)
-
-Scheduler:
-- `src/main/java/com/pietrofaggion/paymentsystem/scheduler/OutboxScheduler.java`
-
-Every 5s:
-- Loads `PENDING` outbox rows
-- Calls notification publisher
-- On success: `SENT` + `sentAt`
-- On failure: increments `retryCount`, marks `FAILED` when `retryCount >= 3`
-
-Scheduling enabled in:
-- `src/main/java/com/pietrofaggion/paymentsystem/config/AppConfig.java`
-
-Scheduler single thread:
-- `spring.task.scheduling.pool.size=1` in `src/main/resources/application.yml`
-
-### Kafka publishing
-
-Publisher service:
-- `src/main/java/com/pietrofaggion/paymentsystem/service/impl/NotificationServiceImpl.java`
-
-Producer config:
-- `src/main/java/com/pietrofaggion/paymentsystem/config/KafkaConfig.java`
-
-Behavior:
-- Sends JSON string message to topic `payment-notifications`
-- Kafka key is `senderAccountId` (keeps same-sender ordering/partition affinity)
-
-### Persistence model
-
-Entities:
-- `src/main/java/com/pietrofaggion/paymentsystem/entity/Account.java`
-- `src/main/java/com/pietrofaggion/paymentsystem/entity/Transaction.java`
-- `src/main/java/com/pietrofaggion/paymentsystem/entity/NotificationOutbox.java`
-
-Repositories:
-- `src/main/java/com/pietrofaggion/paymentsystem/repository/AccountRepository.java`
-- `src/main/java/com/pietrofaggion/paymentsystem/repository/TransactionRepository.java`
-- `src/main/java/com/pietrofaggion/paymentsystem/repository/NotificationOutboxRepository.java`
-
-### Error handling
-
-Global exception mapping:
-- `src/main/java/com/pietrofaggion/paymentsystem/exception/GlobalExceptionHandler.java`
-
-Handles:
-- Insufficient funds
-- Account not found
-- Validation errors
-- Idempotency key unique constraint conflicts
+Default ports: app `8080`, Postgres `5433`, Kafka `9092`.
 
 ## Tests
-
-Integration:
-- `src/test/java/com/pietrofaggion/paymentsystem/controller/PaymentControllerIntegrationTest.java`
-
-Unit:
-- `src/test/java/com/pietrofaggion/paymentsystem/service/impl/PaymentServiceImplTest.java`
-- `src/test/java/com/pietrofaggion/paymentsystem/service/impl/NotificationServiceImplTest.java`
-- `src/test/java/com/pietrofaggion/paymentsystem/scheduler/OutboxSchedulerTest.java`
-
-Run tests:
 
 ```bash
 mvn test
 ```
+
+Integration tests use an embedded H2 database (PostgreSQL mode) and embedded Kafka — no external services required.

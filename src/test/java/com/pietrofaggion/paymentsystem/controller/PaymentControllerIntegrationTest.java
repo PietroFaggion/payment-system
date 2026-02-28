@@ -309,6 +309,33 @@ class PaymentControllerIntegrationTest {
     }
 
     @Test
+    void createPaymentShouldReturn409WhenIdempotencyKeyReusedWithDifferentParameters() throws Exception {
+        Account sender = accountRepository.save(buildAccount("Sender", "200.0000", "EUR"));
+        Account receiver = accountRepository.save(buildAccount("Receiver", "50.0000", "EUR"));
+
+        PaymentRequestDto original = buildRequest(sender.getId(), receiver.getId(), "30.0000", "EUR", "idem-conflict-1");
+
+        mockMvc.perform(post("/payments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(original)))
+                .andExpect(status().isCreated());
+
+        // Same key, different amount — fraudulent/misuse attempt
+        PaymentRequestDto tampered = buildRequest(sender.getId(), receiver.getId(), "99.0000", "EUR", "idem-conflict-1");
+
+        mockMvc.perform(post("/payments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(tampered)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Idempotency key reused with different payment parameters"));
+
+        // Original payment must not be repeated — balance reflects only the first 30 EUR deduction
+        Account refreshedSender = accountRepository.findById(sender.getId()).orElseThrow();
+        assertThat(refreshedSender.getBalance()).isEqualByComparingTo("170.0000");
+        assertThat(transactionRepository.findAll()).hasSize(1);
+    }
+
+    @Test
     void concurrentRequestsWithSameIdempotencyKeyShouldNotDuplicateTransaction() throws Exception {
         Account sender = accountRepository.save(buildAccount("Sender", "500.0000", "EUR"));
         Account receiver = accountRepository.save(buildAccount("Receiver", "100.0000", "EUR"));
