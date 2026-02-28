@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/payment_system
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:postgres}
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5433}/${POSTGRES_DB:payments_db}
+    username: ${POSTGRES_USER:payments_user}
+    password: ${POSTGRES_PASSWORD:payments_pass}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -13,14 +13,22 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: payment-system-group
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "com.pietrofaggion.paymentsystem.*"
+    bootstrap-servers: localhost:${KAFKA_BROKER_PORT:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5433}/${POSTGRES_DB:payments_db}
+    user: ${POSTGRES_USER:payments_user}
+    password: ${POSTGRES_PASSWORD:payments_pass}
+  task:
+    scheduling:
+      pool:
+        size: 1
+
+app:
+  kafka:
+    topics:
+      payment-notifications: payment-notifications
