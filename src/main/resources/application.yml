@@ -41,3 +41,6 @@ app:
   kafka:
     topics:
       payment-notifications: payment-notifications
+  outbox:
+    scheduler:
+      delay-ms: 5000  # milliseconds between outbox scheduler runs; increase locally to observe intermediate DB states

@@ -119,9 +119,9 @@ Expected: HTTP `200 OK` with full transaction details.
 
 ---
 
-## 7. Idempotency — duplicate request
+## 7. Idempotency — safe retry (same parameters)
 
-Replay the same request with the same `idempotencyKey`:
+Replay the exact same request (same key, same parameters) to simulate a network retry:
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
@@ -135,13 +135,33 @@ curl -i -X POST http://localhost:8080/payments \
   }'
 ```
 
-Expected: HTTP `409 Conflict` — payment not applied a second time, no new Kafka message.
+Expected: HTTP `201 Created` — returns the **same** `transactionId` as the first call. Balance unchanged (no second deduction). No new Kafka message.
 
 ---
 
-## 8. Insufficient funds
+## 8. Idempotency — key reuse with different parameters
 
-Charlie (300 EUR) tries to send more than he has:
+Attempt to reuse the same key but with a different amount (fraudulent/misuse attempt):
+
+```bash
+curl -i -X POST http://localhost:8080/payments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "senderAccountId": 1001,
+    "receiverAccountId": 1003,
+    "amount": 999.00,
+    "currency": "EUR",
+    "idempotencyKey": "test-happy-001"
+  }'
+```
+
+Expected: HTTP `409 Conflict` with message `"Idempotency key reused with different payment parameters"`. Original payment is unaffected.
+
+---
+
+## 9. Insufficient funds
+
+Charlie (300 EUR at startup) tries to send more than he has:
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
@@ -159,7 +179,7 @@ Expected: HTTP `422 Unprocessable Entity` — no balance change, no Kafka messag
 
 ---
 
-## 9. Currency mismatch
+## 10. Currency mismatch
 
 Alice (EUR account) sends with USD currency:
 
@@ -179,7 +199,7 @@ Expected: HTTP `422 Unprocessable Entity`.
 
 ---
 
-## 10. Self-transfer
+## 11. Self-transfer
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
@@ -197,7 +217,7 @@ Expected: HTTP `400 Bad Request` — sender and receiver must be different.
 
 ---
 
-## 11. Account not found
+## 12. Account not found
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
@@ -215,7 +235,7 @@ Expected: HTTP `404 Not Found`.
 
 ---
 
-## 12. Validation error
+## 13. Validation error
 
 Missing required fields:
 
@@ -229,7 +249,60 @@ Expected: HTTP `400 Bad Request` with field-level error details.
 
 ---
 
-## 13. Inspect DB state
+## 14. Observe the outbox pattern under Kafka failure
+
+This step shows the payment succeeding immediately while Kafka is down, then the scheduler retrying and delivering once Kafka recovers.
+
+**Tip:** the scheduler delay defaults to 5 s, which can be too fast to catch manually. Start the app with a slower delay so you have time to inspect the DB between runs:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments=--app.outbox.scheduler.delay-ms=30000
+```
+
+**Steps:**
+
+```bash
+# 1. Pause Kafka (simulates a broker outage — the container is still "running" but not responding)
+docker pause kafka
+
+# 2. Create a payment — succeeds immediately (outbox decouples Kafka from the HTTP response)
+curl -i -X POST http://localhost:8080/payments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "senderAccountId": 1001,
+    "receiverAccountId": 1003,
+    "amount": 10.00,
+    "currency": "EUR",
+    "idempotencyKey": "test-outbox-demo"
+  }'
+# Expected: HTTP 201 Created — payment goes through despite Kafka being down
+
+# 3. Check the outbox row — it should be PENDING (or PROCESSING during a scheduler tick)
+docker exec -it postgres psql -U payments_user -d payments_db \
+  -c "SELECT id, status, retry_count, sent_at FROM notification_outbox ORDER BY created_at DESC LIMIT 1;"
+# Expected: status=PENDING, retry_count=0 (before first scheduler run)
+
+# 4. Wait for one or two scheduler ticks (~30 s if using the slow delay above)
+#    Each failed attempt increments retry_count and keeps the row PENDING.
+#    Watch it in the app log: "Kafka broker unavailable" errors will appear.
+
+# 5. Check again — retry_count should have increased
+docker exec -it postgres psql -U payments_user -d payments_db \
+  -c "SELECT id, status, retry_count, sent_at FROM notification_outbox ORDER BY created_at DESC LIMIT 1;"
+# Expected: status=PENDING, retry_count=1 (or 2)
+
+# 6. Unpause Kafka — the next scheduler tick will succeed
+docker unpause kafka
+
+# 7. Wait one more tick, then check — row is now SENT and message appears in the Kafka consumer terminal
+docker exec -it postgres psql -U payments_user -d payments_db \
+  -c "SELECT id, status, retry_count, sent_at FROM notification_outbox ORDER BY created_at DESC LIMIT 1;"
+# Expected: status=SENT, sent_at populated
+```
+
+---
+
+## 16. Inspect DB state
 
 ```bash
 docker exec -it postgres psql -U payments_user -d payments_db
@@ -256,7 +329,7 @@ After a successful payment:
 
 ---
 
-## 14. Swagger UI
+## 17. Swagger UI
 
 Open in a browser:
 
@@ -268,7 +341,7 @@ All endpoints are documented and executable from the UI.
 
 ---
 
-## 15. Run automated tests
+## 18. Run automated tests
 
 No infrastructure needed — tests use embedded H2 and embedded Kafka:
 

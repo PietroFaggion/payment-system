@@ -26,7 +26,7 @@ public class OutboxScheduler {
     private final OutboxClaimService outboxClaimService;
     private final OutboxRowProcessor outboxRowProcessor;
 
-    @Scheduled(fixedDelay = 5000)
+    @Scheduled(fixedDelayString = "${app.outbox.scheduler.delay-ms:5000}")
     public void processOutbox() {
         List<Long> claimedIds = outboxClaimService.claimPending(BATCH_SIZE);
         for (Long rowId : claimedIds) {
