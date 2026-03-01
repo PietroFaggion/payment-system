@@ -2,6 +2,11 @@
 
 Step-by-step actions to manually exercise the payment system end to end.
 
+> **Authentication**: all `/payments` endpoints require HTTP Basic authentication.
+> Default credentials: `payments-user` / `payments-pass` (override with `SECURITY_USER` / `SECURITY_PASSWORD` env vars).
+> The curl examples below use `-u payments-user:payments-pass`.
+> Actuator health/info and Swagger UI are open without credentials.
+
 ---
 
 ## 1. Start infrastructure
@@ -58,7 +63,7 @@ mvn spring-boot:run
 Flyway applies migrations V1 (schema) and V2 (seed data) automatically.
 The app starts on port 8080.
 
-Check it is up:
+Check it is up (no auth required):
 
 ```bash
 curl http://localhost:8080/actuator/health
@@ -90,6 +95,7 @@ Alice (EUR) sends 100 EUR to Charlie (EUR):
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 1001,
@@ -111,7 +117,8 @@ Expected:
 ## 6. Retrieve the payment
 
 ```bash
-curl http://localhost:8080/payments/{transactionId}
+curl -u payments-user:payments-pass \
+  http://localhost:8080/payments/{transactionId}
 # Replace {transactionId} with the ID from the previous response
 ```
 
@@ -125,6 +132,7 @@ Replay the exact same request (same key, same parameters) to simulate a network 
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 1001,
@@ -145,6 +153,7 @@ Attempt to reuse the same key but with a different amount (fraudulent/misuse att
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 1001,
@@ -165,6 +174,7 @@ Charlie (300 EUR at startup) tries to send more than he has:
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 1003,
@@ -185,6 +195,7 @@ Alice (EUR account) sends with USD currency:
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 1001,
@@ -203,6 +214,7 @@ Expected: HTTP `422 Unprocessable Entity`.
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 1001,
@@ -221,6 +233,7 @@ Expected: HTTP `400 Bad Request` — sender and receiver must be different.
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 9999,
@@ -241,6 +254,7 @@ Missing required fields:
 
 ```bash
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -249,7 +263,21 @@ Expected: HTTP `400 Bad Request` with field-level error details.
 
 ---
 
-## 14. Observe the outbox pattern under Kafka failure
+## 14. Missing credentials
+
+Omit the `-u` flag to verify the endpoint is protected:
+
+```bash
+curl -i -X POST http://localhost:8080/payments \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Expected: HTTP `401 Unauthorized`.
+
+---
+
+## 15. Observe the outbox pattern under Kafka failure
 
 This step shows the payment succeeding immediately while Kafka is down, then the scheduler retrying and delivering once Kafka recovers.
 
@@ -267,6 +295,7 @@ docker pause kafka
 
 # 2. Create a payment — succeeds immediately (outbox decouples Kafka from the HTTP response)
 curl -i -X POST http://localhost:8080/payments \
+  -u payments-user:payments-pass \
   -H "Content-Type: application/json" \
   -d '{
     "senderAccountId": 1001,
@@ -331,13 +360,13 @@ After a successful payment:
 
 ## 17. Swagger UI
 
-Open in a browser:
+Open in a browser (no login required):
 
 ```
 http://localhost:8080/swagger-ui.html
 ```
 
-All endpoints are documented and executable from the UI.
+All endpoints are documented and executable from the UI. Use the **Authorize** button (lock icon) and enter `payments-user` / `payments-pass` to authenticate requests within Swagger.
 
 ---
 

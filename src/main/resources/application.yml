@@ -1,4 +1,8 @@
 spring:
+  security:
+    user:
+      name: ${SECURITY_USER:payments-user}
+      password: ${SECURITY_PASSWORD:payments-pass}
   datasource:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5433}/${POSTGRES_DB:payments_db}
     username: ${POSTGRES_USER:payments_user}

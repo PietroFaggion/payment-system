@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -79,6 +80,7 @@ class OutboxRetryIntegrationTest {
         Account receiver = accountRepository.save(buildAccount("Receiver", "50.0000", "EUR"));
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 buildRequest(sender.getId(), receiver.getId(), "50.0000", "EUR", "idem-retry-1"))))
@@ -114,6 +116,7 @@ class OutboxRetryIntegrationTest {
         Account receiver = accountRepository.save(buildAccount("Receiver", "50.0000", "EUR"));
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 buildRequest(sender.getId(), receiver.getId(), "50.0000", "EUR", "idem-fail-1"))))

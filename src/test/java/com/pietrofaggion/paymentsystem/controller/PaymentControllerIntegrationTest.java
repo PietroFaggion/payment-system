@@ -34,6 +34,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -85,6 +86,7 @@ class PaymentControllerIntegrationTest {
         PaymentRequestDto request = buildRequest(sender.getId(), receiver.getId(), "25.0000", "EUR", "idem-int-1");
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -110,6 +112,7 @@ class PaymentControllerIntegrationTest {
         PaymentRequestDto request = buildRequest(sender.getId(), receiver.getId(), "10.0000", "EUR", "idem-get-1");
 
         String responseBody = mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -117,7 +120,8 @@ class PaymentControllerIntegrationTest {
 
         Long transactionId = objectMapper.readTree(responseBody).get("transactionId").asLong();
 
-        mockMvc.perform(get("/payments/" + transactionId))
+        mockMvc.perform(get("/payments/" + transactionId)
+                        .with(httpBasic("payments-user", "payments-pass")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.transactionId").value(transactionId))
                 .andExpect(jsonPath("$.status").value(TransactionStatus.COMPLETED.name()));
@@ -125,7 +129,8 @@ class PaymentControllerIntegrationTest {
 
     @Test
     void getPaymentShouldReturn404WhenNotFound() throws Exception {
-        mockMvc.perform(get("/payments/99999"))
+        mockMvc.perform(get("/payments/99999")
+                        .with(httpBasic("payments-user", "payments-pass")))
                 .andExpect(status().isNotFound());
     }
 
@@ -137,6 +142,7 @@ class PaymentControllerIntegrationTest {
         PaymentRequestDto request = buildRequest(sender.getId(), receiver.getId(), "10.0000", "EUR", "idem-currency-1");
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
@@ -150,6 +156,7 @@ class PaymentControllerIntegrationTest {
         PaymentRequestDto request = buildRequest(account.getId(), account.getId(), "10.0000", "EUR", "idem-self-1");
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -167,6 +174,7 @@ class PaymentControllerIntegrationTest {
         PaymentRequestDto request = buildRequest(sender.getId(), receiver.getId(), "100.0000", "EUR", "idem-kafka-1");
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -223,6 +231,7 @@ class PaymentControllerIntegrationTest {
         Callable<MvcResult> task1 = () -> {
             barrier.await(5, TimeUnit.SECONDS);
             return mockMvc.perform(post("/payments")
+                            .with(httpBasic("payments-user", "payments-pass"))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(aliceToBob)))
                     .andReturn();
@@ -231,6 +240,7 @@ class PaymentControllerIntegrationTest {
         Callable<MvcResult> task2 = () -> {
             barrier.await(5, TimeUnit.SECONDS);
             return mockMvc.perform(post("/payments")
+                            .with(httpBasic("payments-user", "payments-pass"))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(bobToAlice)))
                     .andReturn();
@@ -280,6 +290,7 @@ class PaymentControllerIntegrationTest {
 
         // First call — should create the transaction
         String firstResponse = mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -290,6 +301,7 @@ class PaymentControllerIntegrationTest {
 
         // Second call with the same idempotency key — should return the same transaction, NOT create a new one
         String secondResponse = mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -316,6 +328,7 @@ class PaymentControllerIntegrationTest {
         PaymentRequestDto original = buildRequest(sender.getId(), receiver.getId(), "30.0000", "EUR", "idem-conflict-1");
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(original)))
                 .andExpect(status().isCreated());
@@ -324,6 +337,7 @@ class PaymentControllerIntegrationTest {
         PaymentRequestDto tampered = buildRequest(sender.getId(), receiver.getId(), "99.0000", "EUR", "idem-conflict-1");
 
         mockMvc.perform(post("/payments")
+                        .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(tampered)))
                 .andExpect(status().isConflict())
@@ -351,6 +365,7 @@ class PaymentControllerIntegrationTest {
             futures.add(executor.submit(() -> {
                 barrier.await(5, TimeUnit.SECONDS);
                 return mockMvc.perform(post("/payments")
+                                .with(httpBasic("payments-user", "payments-pass"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
                         .andReturn();
@@ -421,6 +436,7 @@ class PaymentControllerIntegrationTest {
                         "idem-stress-" + index
                 );
                 return mockMvc.perform(post("/payments")
+                                .with(httpBasic("payments-user", "payments-pass"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(req)))
                         .andReturn();
@@ -504,6 +520,7 @@ class PaymentControllerIntegrationTest {
                 PaymentRequestDto req = buildRequest(alice.getId(), bob.getId(),
                         amount.toPlainString(), "EUR", "idem-a2b-" + index);
                 return mockMvc.perform(post("/payments")
+                                .with(httpBasic("payments-user", "payments-pass"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(req)))
                         .andReturn();
@@ -517,6 +534,7 @@ class PaymentControllerIntegrationTest {
                 PaymentRequestDto req = buildRequest(bob.getId(), alice.getId(),
                         amount.toPlainString(), "EUR", "idem-b2a-" + index);
                 return mockMvc.perform(post("/payments")
+                                .with(httpBasic("payments-user", "payments-pass"))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(req)))
                         .andReturn();
