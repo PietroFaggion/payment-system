@@ -31,6 +31,34 @@ public class PaymentServiceImpl implements PaymentService {
     private final NotificationOutboxRepository notificationOutboxRepository;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Executes a money transfer within a single database transaction.
+     * <p>
+     * Steps (all atomic — any failure rolls back everything):
+     * <ol>
+     *   <li><b>Idempotency check</b> — if the key already exists and all parameters match,
+     *       the stored result is returned immediately without re-executing the transfer.
+     *       If the key exists but with different parameters, {@link IdempotencyConflictException}
+     *       is thrown to signal a fraudulent reuse attempt.</li>
+     *   <li><b>Pessimistic lock</b> — both accounts are locked with {@code SELECT FOR UPDATE}
+     *       in ascending ID order to prevent the classic A→B / B→A deadlock pattern.</li>
+     *   <li><b>Validation</b> — currency match and sufficient balance are verified
+     *       after locking to avoid race conditions with concurrent transfers.</li>
+     *   <li><b>Balance update</b> — sender is debited and receiver is credited.</li>
+     *   <li><b>Transaction record</b> — a {@link Transaction} row is persisted with
+     *       status {@code COMPLETED}.</li>
+     *   <li><b>Outbox row</b> — a {@link NotificationOutbox} row is written in the same
+     *       transaction so the Kafka notification is delivered reliably by the background
+     *       scheduler even if the broker is temporarily unavailable.</li>
+     * </ol>
+     *
+     * @param request validated payment request
+     * @return response DTO with the transaction ID and current status
+     * @throws IdempotencyConflictException if the key is reused with different parameters
+     * @throws AccountNotFoundException     if either account does not exist
+     * @throws CurrencyMismatchException    if the request currency differs from the sender's account currency
+     * @throws InsufficientFundsException   if the sender balance is insufficient
+     */
     @Override
     @Transactional
     public PaymentResponseDto createPayment(PaymentRequestDto request) {
@@ -102,6 +130,13 @@ public class PaymentServiceImpl implements PaymentService {
         return toResponse(savedTransaction);
     }
 
+    /**
+     * Retrieves a transaction by its primary key in a read-only transaction.
+     *
+     * @param transactionId the transaction's primary key
+     * @return the corresponding response DTO
+     * @throws TransactionNotFoundException if no transaction exists with the given ID
+     */
     @Override
     @Transactional(readOnly = true)
     public PaymentResponseDto getPaymentById(Long transactionId) {
@@ -110,6 +145,14 @@ public class PaymentServiceImpl implements PaymentService {
         return toResponse(transaction);
     }
 
+    /**
+     * Serialises the relevant transaction fields to a JSON string that is stored in the outbox
+     * row and later published verbatim as the Kafka message value.
+     *
+     * @param transaction the persisted transaction to serialise
+     * @return JSON-encoded notification payload
+     * @throws IllegalStateException if Jackson serialisation fails (should never occur)
+     */
     private String buildOutboxPayload(Transaction transaction) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("transactionId", transaction.getId());
@@ -128,6 +171,12 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    /**
+     * Maps a {@link Transaction} entity to the API response DTO.
+     *
+     * @param transaction the source entity
+     * @return the corresponding {@link PaymentResponseDto}
+     */
     private PaymentResponseDto toResponse(Transaction transaction) {
         PaymentResponseDto response = new PaymentResponseDto();
         response.setTransactionId(transaction.getId());

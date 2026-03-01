@@ -25,6 +25,17 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
+    /**
+     * Validates the request, delegates the transfer to {@link com.pietrofaggion.paymentsystem.service.PaymentService},
+     * and returns HTTP {@code 201 Created} with a {@code Location} header pointing to the new resource.
+     * <p>
+     * The endpoint is idempotent: sending the same {@code idempotencyKey} with identical parameters
+     * returns the original transaction without re-executing the transfer. Reusing the key with
+     * different parameters returns HTTP {@code 409 Conflict}.
+     *
+     * @param request validated payment details
+     * @return {@code 201 Created} containing the transaction summary and a {@code Location} header
+     */
     @PostMapping
     @Operation(summary = "Create a payment", description = "Transfers funds from sender to receiver. Idempotent: repeating the same idempotency key returns the original transaction.")
     @ApiResponses({
@@ -40,6 +51,12 @@ public class PaymentController {
         return ResponseEntity.created(location).body(response);
     }
 
+    /**
+     * Looks up a payment by its transaction ID and returns the full transaction details.
+     *
+     * @param transactionId the ID returned when the payment was created
+     * @return {@code 200 OK} with the transaction, or {@code 404 Not Found} if it does not exist
+     */
     @GetMapping("/{transactionId}")
     @Operation(summary = "Get payment by ID", description = "Retrieves a transaction by its ID.")
     @ApiResponses({

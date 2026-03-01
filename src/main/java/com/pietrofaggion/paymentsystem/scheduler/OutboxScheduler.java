@@ -26,6 +26,19 @@ public class OutboxScheduler {
     private final OutboxClaimService outboxClaimService;
     private final OutboxRowProcessor outboxRowProcessor;
 
+    /**
+     * Executes one iteration of the two-phase outbox delivery loop.
+     * <ol>
+     *   <li><b>Claim</b> — delegates to {@link OutboxClaimService#claimPending} which
+     *       atomically transitions up to {@value BATCH_SIZE} PENDING rows to PROCESSING
+     *       using {@code SELECT FOR UPDATE SKIP LOCKED} and commits.</li>
+     *   <li><b>Process</b> — delegates each claimed ID to {@link OutboxRowProcessor#process},
+     *       which runs in its own independent {@code REQUIRES_NEW} transaction so that a Kafka
+     *       failure on one row never rolls back the state of the others.</li>
+     * </ol>
+     * The delay between consecutive runs is controlled by {@code app.outbox.scheduler.delay-ms}
+     * (defaults to 5 000 ms). Increasing it locally is useful to observe intermediate DB states.
+     */
     @Scheduled(fixedDelayString = "${app.outbox.scheduler.delay-ms:5000}")
     public void processOutbox() {
         List<Long> claimedIds = outboxClaimService.claimPending(BATCH_SIZE);

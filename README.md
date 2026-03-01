@@ -38,6 +38,25 @@ Failed Kafka sends are retried up to three times (`retryCount` tracked per row).
 - Amount must be positive, all fields required
 - Errors return a structured `ApiError` with an appropriate HTTP status
 
+## Design Patterns
+
+### Transactional Outbox
+The payment record and the `NotificationOutbox` row are written in a single DB transaction. A background scheduler reads the outbox and delivers the Kafka message asynchronously, so a broker outage never blocks or rolls back a payment.
+
+### Two-phase Outbox Delivery
+The scheduler operates in two separate transactions to avoid holding locks across slow I/O:
+1. **Claim** (`OutboxClaimService`) — `SELECT FOR UPDATE SKIP LOCKED` atomically marks a batch of rows `PROCESSING` and commits. Rows locked by another instance are automatically skipped.
+2. **Process** (`OutboxRowProcessor`) — each row runs in its own `REQUIRES_NEW` transaction so a Kafka failure on one row never rolls back the others.
+
+### Pessimistic Locking (deadlock-free)
+Before any balance change, both accounts are locked with `SELECT FOR UPDATE` in ascending ID order. The consistent ordering eliminates the classic A→B / B→A deadlock when two concurrent transfers share the same account pair.
+
+### Idempotency
+A unique DB constraint on `idempotency_key` is the primary safety net against duplicate transactions. The application layer adds a second check: if the same key is reused with different parameters it returns HTTP `409 Conflict` to surface a potential fraudulent attempt rather than silently ignoring it.
+
+### HTTP Basic Authentication
+All payment endpoints are protected via Spring Security HTTP Basic. Credentials are externalised through environment variables (`SECURITY_USER`, `SECURITY_PASSWORD`). Actuator health/info and Swagger UI remain open to simplify monitoring and developer tooling.
+
 ## API
 
 | Method | Path | Description |

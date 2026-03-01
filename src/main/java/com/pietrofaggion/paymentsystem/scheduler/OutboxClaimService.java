@@ -22,6 +22,18 @@ public class OutboxClaimService {
 
     private final NotificationOutboxRepository notificationOutboxRepository;
 
+    /**
+     * Selects up to {@code batchSize} PENDING rows using {@code SELECT FOR UPDATE SKIP LOCKED},
+     * transitions them to {@code PROCESSING}, and commits — all within a single short transaction.
+     * <p>
+     * Rows already locked by another application instance are skipped automatically, so each row
+     * is claimed by exactly one replica even when multiple instances run concurrently. The
+     * claimed IDs are returned for subsequent per-row processing by
+     * {@link OutboxRowProcessor#process}.
+     *
+     * @param batchSize maximum number of rows to claim in one scheduler tick
+     * @return IDs of the rows that were successfully transitioned to {@code PROCESSING}
+     */
     @Transactional
     public List<Long> claimPending(int batchSize) {
         List<NotificationOutbox> rows = notificationOutboxRepository

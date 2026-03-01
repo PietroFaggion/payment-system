@@ -23,6 +23,21 @@ public class OutboxRowProcessor {
     private final NotificationOutboxRepository notificationOutboxRepository;
     private final NotificationService notificationService;
 
+    /**
+     * Sends the Kafka notification for a single outbox row and updates its final status,
+     * all within an independent {@code REQUIRES_NEW} transaction so that a failure on this
+     * row does not affect sibling rows processed in the same scheduler batch.
+     * <p>
+     * On <b>success</b> the row is marked {@code SENT} and {@code sentAt} is timestamped.<br>
+     * On <b>failure</b> {@code retryCount} is incremented; once it reaches 3 the row is
+     * permanently marked {@code FAILED} and will no longer be picked up by the scheduler.
+     * <p>
+     * If the row is not found or is no longer in {@code PROCESSING} state (e.g. claimed and
+     * resolved by another instance after a crash-recovery), the method returns immediately
+     * without taking any action.
+     *
+     * @param rowId primary key of the {@link NotificationOutbox} row to process
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void process(Long rowId) {
         NotificationOutbox row = notificationOutboxRepository.findById(rowId).orElse(null);
