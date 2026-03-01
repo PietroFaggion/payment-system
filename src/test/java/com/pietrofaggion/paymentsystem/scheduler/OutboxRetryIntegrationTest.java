@@ -71,7 +71,7 @@ class OutboxRetryIntegrationTest {
     }
 
     // ------------------------------------------------------------------
-    // 1) Kafka fails on first attempt, succeeds on second — the outbox
+    // 1) Kafka fails on first attempt, succeeds on second - the outbox
     //    retries and eventually marks the row SENT.
     // ------------------------------------------------------------------
     @Test
@@ -108,7 +108,7 @@ class OutboxRetryIntegrationTest {
     }
 
     // ------------------------------------------------------------------
-    // 2) Kafka always fails — after 3 attempts the row is marked FAILED.
+    // 2) Kafka always fails - after 3 attempts the row is marked FAILED.
     // ------------------------------------------------------------------
     @Test
     void outboxShouldMarkAsFailedAfterThreeConsecutiveKafkaFailures() throws Exception {
@@ -137,7 +137,7 @@ class OutboxRetryIntegrationTest {
         assertThat(outbox.getStatus()).isEqualTo(OutboxStatus.PENDING);
         assertThat(outbox.getRetryCount()).isEqualTo(2);
 
-        // Attempt 3: retryCount=3, FAILED — no more retries
+        // Attempt 3: retryCount=3, FAILED - no more retries
         outboxScheduler.processOutbox();
         outbox = notificationOutboxRepository.findAll().get(0);
         assertThat(outbox.getStatus()).isEqualTo(OutboxStatus.FAILED);

@@ -10,10 +10,10 @@ import java.util.List;
 /**
  * Drives the two-phase outbox delivery loop:
  * <ol>
- *   <li>Claim — {@link OutboxClaimService} atomically marks a batch of PENDING
+ *   <li>Claim - {@link OutboxClaimService} atomically marks a batch of PENDING
  *       rows as PROCESSING using SELECT FOR UPDATE SKIP LOCKED, then commits.
  *       Rows claimed by this instance are invisible to other instances.</li>
- *   <li>Process — {@link OutboxRowProcessor} handles each claimed row in its
+ *   <li>Process - {@link OutboxRowProcessor} handles each claimed row in its
  *       own REQUIRES_NEW transaction, so a Kafka failure on one row never
  *       rolls back the state of other rows in the same batch.</li>
  * </ol>
@@ -31,10 +31,10 @@ public class OutboxScheduler {
     /**
      * Executes one iteration of the two-phase outbox delivery loop.
      * <ol>
-     *   <li><b>Claim</b> — delegates to {@link OutboxClaimService#claimPending} which
+     *   <li><b>Claim</b> - delegates to {@link OutboxClaimService#claimPending} which
      *       atomically transitions up to {@value BATCH_SIZE} PENDING rows to PROCESSING
      *       using {@code SELECT FOR UPDATE SKIP LOCKED} and commits.</li>
-     *   <li><b>Process</b> — delegates each claimed ID to {@link OutboxRowProcessor#process},
+     *   <li><b>Process</b> - delegates each claimed ID to {@link OutboxRowProcessor#process},
      *       which runs in its own independent {@code REQUIRES_NEW} transaction so that a Kafka
      *       failure on one row never rolls back the state of the others.</li>
      * </ol>

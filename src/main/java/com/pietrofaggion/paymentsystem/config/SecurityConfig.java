@@ -16,11 +16,11 @@ public class SecurityConfig {
     /**
      * Defines the HTTP security filter chain:
      * <ul>
-     *   <li><b>CSRF disabled</b> — the API is stateless and consumed by machine clients
+     *   <li><b>CSRF disabled</b> - the API is stateless and consumed by machine clients
      *       that do not use browser sessions.</li>
-     *   <li><b>Stateless sessions</b> — no {@code HttpSession} is created; each request
+     *   <li><b>Stateless sessions</b> - no {@code HttpSession} is created; each request
      *       must carry credentials.</li>
-     *   <li><b>Open paths</b> — {@code /actuator/health}, {@code /actuator/info}, and all
+     *   <li><b>Open paths</b> - {@code /actuator/health}, {@code /actuator/info}, and all
      *       Swagger UI / OpenAPI paths are accessible without authentication.</li>
      *   <li><b>All other paths</b> require valid HTTP Basic credentials.</li>
      * </ul>

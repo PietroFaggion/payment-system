@@ -36,20 +36,20 @@ public class PaymentServiceImpl implements PaymentService {
     /**
      * Executes a money transfer within a single database transaction.
      * <p>
-     * Steps (all atomic — any failure rolls back everything):
+     * Steps (all atomic - any failure rolls back everything):
      * <ol>
-     *   <li><b>Idempotency check</b> — if the key already exists and all parameters match,
+     *   <li><b>Idempotency check</b> - if the key already exists and all parameters match,
      *       the stored result is returned immediately without re-executing the transfer.
      *       If the key exists but with different parameters, {@link IdempotencyConflictException}
      *       is thrown to signal a fraudulent reuse attempt.</li>
-     *   <li><b>Pessimistic lock</b> — both accounts are locked with {@code SELECT FOR UPDATE}
+     *   <li><b>Pessimistic lock</b> - both accounts are locked with {@code SELECT FOR UPDATE}
      *       in ascending ID order to prevent the classic A→B / B→A deadlock pattern.</li>
-     *   <li><b>Validation</b> — currency match and sufficient balance are verified
+     *   <li><b>Validation</b> - currency match and sufficient balance are verified
      *       after locking to avoid race conditions with concurrent transfers.</li>
-     *   <li><b>Balance update</b> — sender is debited and receiver is credited.</li>
-     *   <li><b>Transaction record</b> — a {@link Transaction} row is persisted with
+     *   <li><b>Balance update</b> - sender is debited and receiver is credited.</li>
+     *   <li><b>Transaction record</b> - a {@link Transaction} row is persisted with
      *       status {@code COMPLETED}.</li>
-     *   <li><b>Outbox row</b> — a {@link NotificationOutbox} row is written in the same
+     *   <li><b>Outbox row</b> - a {@link NotificationOutbox} row is written in the same
      *       transaction so the Kafka notification is delivered reliably by the background
      *       scheduler even if the broker is temporarily unavailable.</li>
      * </ol>

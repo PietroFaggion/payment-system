@@ -26,7 +26,7 @@ public class OutboxClaimService {
 
     /**
      * Selects up to {@code batchSize} PENDING rows using {@code SELECT FOR UPDATE SKIP LOCKED},
-     * transitions them to {@code PROCESSING}, and commits — all within a single short transaction.
+     * transitions them to {@code PROCESSING}, and commits - all within a single short transaction.
      * <p>
      * Rows already locked by another application instance are skipped automatically, so each row
      * is claimed by exactly one replica even when multiple instances run concurrently. The

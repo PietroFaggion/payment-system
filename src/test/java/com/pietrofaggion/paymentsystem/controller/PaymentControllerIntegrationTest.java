@@ -253,7 +253,7 @@ class PaymentControllerIntegrationTest {
         MvcResult result2 = future2.get(10, TimeUnit.SECONDS);
         executor.shutdown();
 
-        // Both should succeed (201) or one may get a conflict (409) due to optimistic locking — not deadlock
+        // Both should succeed (201) or one may get a conflict (409) due to optimistic locking - not deadlock
         int status1 = result1.getResponse().getStatus();
         int status2 = result2.getResponse().getStatus();
         assertThat(status1).isIn(201, 409);
@@ -288,7 +288,7 @@ class PaymentControllerIntegrationTest {
 
         PaymentRequestDto request = buildRequest(sender.getId(), receiver.getId(), "30.0000", "EUR", "idem-dup-1");
 
-        // First call — should create the transaction
+        // First call - should create the transaction
         String firstResponse = mockMvc.perform(post("/payments")
                         .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -299,7 +299,7 @@ class PaymentControllerIntegrationTest {
 
         Long firstTxId = objectMapper.readTree(firstResponse).get("transactionId").asLong();
 
-        // Second call with the same idempotency key — should return the same transaction, NOT create a new one
+        // Second call with the same idempotency key - should return the same transaction, NOT create a new one
         String secondResponse = mockMvc.perform(post("/payments")
                         .with(httpBasic("payments-user", "payments-pass"))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -333,7 +333,7 @@ class PaymentControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(original)))
                 .andExpect(status().isCreated());
 
-        // Same key, different amount — fraudulent/misuse attempt
+        // Same key, different amount - fraudulent/misuse attempt
         PaymentRequestDto tampered = buildRequest(sender.getId(), receiver.getId(), "99.0000", "EUR", "idem-conflict-1");
 
         mockMvc.perform(post("/payments")
@@ -343,7 +343,7 @@ class PaymentControllerIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Idempotency key reused with different payment parameters"));
 
-        // Original payment must not be repeated — balance reflects only the first 30 EUR deduction
+        // Original payment must not be repeated - balance reflects only the first 30 EUR deduction
         Account refreshedSender = accountRepository.findById(sender.getId()).orElseThrow();
         assertThat(refreshedSender.getBalance()).isEqualByComparingTo("170.0000");
         assertThat(transactionRepository.findAll()).hasSize(1);

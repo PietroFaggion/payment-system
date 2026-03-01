@@ -41,6 +41,10 @@ management:
     health:
       show-details: always
 
+logging:
+  level:
+    com.pietrofaggion.paymentsystem.scheduler: DEBUG
+
 app:
   kafka:
     topics:
