@@ -45,8 +45,8 @@ The payment record and the `NotificationOutbox` row are written in a single DB t
 
 ### Two-phase Outbox Delivery
 The scheduler operates in two separate transactions to avoid holding locks across slow I/O:
-1. **Claim** (`OutboxClaimService`) — `SELECT FOR UPDATE SKIP LOCKED` atomically marks a batch of rows `PROCESSING` and commits. Rows locked by another instance are automatically skipped.
-2. **Process** (`OutboxRowProcessor`) — each row runs in its own `REQUIRES_NEW` transaction so a Kafka failure on one row never rolls back the others.
+1. **Claim** (`OutboxClaimService`) - `SELECT FOR UPDATE SKIP LOCKED` atomically marks a batch of rows `PROCESSING` and commits. Rows locked by another instance are automatically skipped.
+2. **Process** (`OutboxRowProcessor`) - each row runs in its own `REQUIRES_NEW` transaction so a Kafka failure on one row never rolls back the others.
 
 ### Pessimistic Locking (deadlock-free)
 Before any balance change, both accounts are locked with `SELECT FOR UPDATE` in ascending ID order. The consistent ordering eliminates the classic A→B / B→A deadlock when two concurrent transfers share the same account pair.
@@ -61,7 +61,7 @@ All payment endpoints are protected via Spring Security HTTP Basic. Credentials 
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/payments` | Create a payment — returns `201 Created` with `Location` header |
+| `POST` | `/payments` | Create a payment - returns `201 Created` with `Location` header |
 | `GET` | `/payments/{id}` | Retrieve a payment by transaction ID |
 
 Interactive docs: `http://localhost:8080/swagger-ui.html`
@@ -91,4 +91,4 @@ Default ports: app `8080`, Postgres `5433`, Kafka `9092`.
 mvn test
 ```
 
-Integration tests use an embedded H2 database (PostgreSQL mode) and embedded Kafka — no external services required.
+Integration tests use an embedded H2 database (PostgreSQL mode) and embedded Kafka - no external services required.

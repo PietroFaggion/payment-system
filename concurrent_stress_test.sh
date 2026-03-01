@@ -3,11 +3,11 @@
 #
 # Two-phase concurrent stress test for the payment system.
 #
-# PHASE 1 — 10 unique valid payments fired simultaneously
+# PHASE 1 - 10 unique valid payments fired simultaneously
 #   Exercises deadlock-prevention (bidirectional lock ordering) and
 #   proves that balance is conserved under maximum lock contention.
 #
-# PHASE 2 — 7 concurrent requests mixing idempotency races + intentional failures
+# PHASE 2 - 7 concurrent requests mixing idempotency races + intentional failures
 #   4 requests share the same idempotency key:
 #     · 3 identical (same params)  → all return 201 or 409; exactly 1 tx created
 #     · 1 conflicting (different amount) → must return 409
@@ -43,11 +43,11 @@ FAILED=0   # global failure counter
 pass() { echo "  [PASS] $*"; }
 fail() { echo "  [FAIL] $*"; FAILED=$((FAILED + 1)); }
 
-db() {   # db <sql>  — runs a query and returns trimmed output
+db() {   # db <sql>  - runs a query and returns trimmed output
   docker exec postgres psql -U payments_user -d payments_db -t -c "$1" | tr -d '[:space:]'
 }
 
-db_pretty() {  # db_pretty <sql>  — runs a query with table formatting
+db_pretty() {  # db_pretty <sql>  - runs a query with table formatting
   docker exec postgres psql -U payments_user -d payments_db -c "$1"
 }
 
@@ -69,7 +69,7 @@ status_of() { cat "$1/status_${2}.txt" 2>/dev/null || echo "ERR"; }
 # ── preflight ──────────────────────────────────────────────────────────────────
 
 echo "================================================================"
-echo "  Concurrent Payment Stress Test — Phase 1 + Phase 2"
+echo "  Concurrent Payment Stress Test - Phase 1 + Phase 2"
 echo "================================================================"
 echo
 
@@ -87,7 +87,7 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PHASE 1 — 10 unique valid concurrent payments
+# PHASE 1 - 10 unique valid concurrent payments
 #
 # All transfers are bidirectional across Alice(1001) / Bob(1002) / Charlie(1003),
 # hitting the pessimistic-lock ordering (ascending account ID) simultaneously.
@@ -147,7 +147,7 @@ echo
   || fail "$P1_FAIL / ${#P1[@]} Phase 1 request(s) did not return HTTP 201"
 
 echo
-echo "--- Phase 1: DB — transactions ---"
+echo "--- Phase 1: DB - transactions ---"
 db_pretty "SELECT id, sender_account_id AS sender, receiver_account_id AS receiver,
                   amount, currency, status, idempotency_key
            FROM transactions
@@ -165,11 +165,11 @@ P1_COMPLETED=$(db "SELECT COUNT(*) FROM transactions
 FAILED=$((FAILED + P1_FAIL))
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PHASE 2 — 7 concurrent requests: idempotency races + intentional failures
+# PHASE 2 - 7 concurrent requests: idempotency races + intentional failures
 #
 # Idempotency group (indices 0-3, all same key "test-concurrent-idem-01"):
-#   idx 0-2: Alice→Charlie  30 EUR  (identical params — idempotent duplicates)
-#   idx 3:   Alice→Charlie 999 EUR  (same key, DIFFERENT amount — conflict)
+#   idx 0-2: Alice→Charlie  30 EUR  (identical params - idempotent duplicates)
+#   idx 3:   Alice→Charlie 999 EUR  (same key, DIFFERENT amount - conflict)
 #   → Exactly ONE transaction must be created; all responses in {201, 409}
 #   → At least one 201 (the winner) and at least one 409 (the conflict)
 #
@@ -238,21 +238,21 @@ echo
 # At least one 201 (a winner was created)
 [ "$IDEM_201" -ge 1 ] \
   && pass "At least one 201 in the idempotency group (a winner was created)" \
-  || fail "No 201 in the idempotency group — transaction may not have been created"
+  || fail "No 201 in the idempotency group - transaction may not have been created"
 
 # At least one 409 (the conflict or a race loser was rejected)
 [ "$IDEM_409" -ge 1 ] \
   && pass "At least one 409 in the idempotency group (conflict/race properly rejected)" \
-  || fail "No 409 in the idempotency group — idempotency enforcement may have failed"
+  || fail "No 409 in the idempotency group - idempotency enforcement may have failed"
 
 # No unexpected status codes (no 5xx, no 422, no 400)
 [ "$IDEM_UNEXPECTED" -eq 0 ] \
-  && pass "All idempotency-group responses are in {201, 409} — no server errors" \
+  && pass "All idempotency-group responses are in {201, 409} - no server errors" \
   || fail "$IDEM_UNEXPECTED unexpected status code(s) in idempotency group"
 
-# Exactly 1 transaction in DB for this key — the most critical invariant
+# Exactly 1 transaction in DB for this key - the most critical invariant
 echo
-echo "--- Phase 2: DB — idempotency group transaction count ---"
+echo "--- Phase 2: DB - idempotency group transaction count ---"
 IDEM_TX_COUNT=$(db "SELECT COUNT(*) FROM transactions WHERE idempotency_key = 'test-concurrent-idem-01';")
 [ "$IDEM_TX_COUNT" = "1" ] \
   && pass "Exactly 1 transaction in DB for test-concurrent-idem-01 (no duplicates)" \
@@ -267,19 +267,19 @@ db_pretty "SELECT id, sender_account_id AS sender, receiver_account_id AS receiv
 echo
 echo "--- Phase 2: Business-rule failure group ---"
 
-# idx 4 — insufficient funds
+# idx 4 - insufficient funds
 s4=$(status_of "$TMP2" "4")
 [ "$s4" = "422" ] \
   && pass "test-concurrent-funds-01 (Charlie → Alice 9999 EUR)  =>  HTTP 422 Insufficient funds" \
   || fail "test-concurrent-funds-01 expected HTTP 422, got $s4"
 
-# idx 5 — self-transfer
+# idx 5 - self-transfer
 s5=$(status_of "$TMP2" "5")
 [ "$s5" = "400" ] \
   && pass "test-concurrent-self-01  (Alice → Alice  10 EUR)     =>  HTTP 400 Self-transfer" \
   || fail "test-concurrent-self-01  expected HTTP 400, got $s5"
 
-# idx 6 — account not found
+# idx 6 - account not found
 s6=$(status_of "$TMP2" "6")
 [ "$s6" = "404" ] \
   && pass "test-concurrent-notfound-01 (9999 → Alice  10 EUR)   =>  HTTP 404 Not Found" \
@@ -287,7 +287,7 @@ s6=$(status_of "$TMP2" "6")
 
 # Failure group must not have created any transactions
 echo
-echo "--- Phase 2: DB — failure group must produce zero transactions ---"
+echo "--- Phase 2: DB - failure group must produce zero transactions ---"
 FAIL_TX=$(db "SELECT COUNT(*) FROM transactions
               WHERE idempotency_key IN (
                 'test-concurrent-funds-01',
@@ -324,7 +324,7 @@ echo "--- Negative balance safety check ---"
 NEGATIVE=$(db "SELECT COUNT(*) FROM accounts WHERE balance < 0;")
 [ "$NEGATIVE" = "0" ] \
   && pass "No account has a negative balance" \
-  || fail "$NEGATIVE account(s) have a negative balance — pessimistic lock may have failed"
+  || fail "$NEGATIVE account(s) have a negative balance - pessimistic lock may have failed"
 
 echo
 echo "--- Outbox entries (one per COMPLETED transaction; expect SENT after ~5 s) ---"
@@ -353,7 +353,7 @@ echo "================================================================"
 if [ "$FAILED" -eq 0 ]; then
   echo "  ALL CONCURRENT-STRESS CHECKS PASSED"
 else
-  echo "  $FAILED CHECK(S) FAILED — review the output above"
+  echo "  $FAILED CHECK(S) FAILED - review the output above"
 fi
 echo "================================================================"
 
