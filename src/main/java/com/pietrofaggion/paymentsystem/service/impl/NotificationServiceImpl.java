@@ -2,6 +2,7 @@ package com.pietrofaggion.paymentsystem.service.impl;
 
 import com.pietrofaggion.paymentsystem.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.util.concurrent.ExecutionException;
  * {@link com.pietrofaggion.paymentsystem.scheduler.OutboxRowProcessor} to increment the
  * retry count and schedule a later delivery attempt.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
@@ -37,8 +39,10 @@ public class NotificationServiceImpl implements NotificationService {
      */
     @Override
     public void send(String payload, String kafkaKey) {
+        log.debug("Sending Kafka message - topic={} key={}", paymentNotificationsTopic, kafkaKey);
         try {
             kafkaTemplate.send(paymentNotificationsTopic, kafkaKey, payload).get();
+            log.debug("Kafka message acknowledged - topic={} key={}", paymentNotificationsTopic, kafkaKey);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Kafka send interrupted", e);

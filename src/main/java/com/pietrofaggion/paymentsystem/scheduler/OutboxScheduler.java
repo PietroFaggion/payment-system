@@ -1,6 +1,7 @@
 package com.pietrofaggion.paymentsystem.scheduler;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ import java.util.List;
  *       rolls back the state of other rows in the same batch.</li>
  * </ol>
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class OutboxScheduler {
@@ -42,8 +44,14 @@ public class OutboxScheduler {
     @Scheduled(fixedDelayString = "${app.outbox.scheduler.delay-ms:5000}")
     public void processOutbox() {
         List<Long> claimedIds = outboxClaimService.claimPending(BATCH_SIZE);
+        if (claimedIds.isEmpty()) {
+            log.debug("Outbox scheduler tick - no pending rows");
+            return;
+        }
+        log.info("Outbox scheduler tick - claimed {} row(s), processing now", claimedIds.size());
         for (Long rowId : claimedIds) {
             outboxRowProcessor.process(rowId);
         }
+        log.info("Outbox scheduler tick - batch of {} row(s) processed", claimedIds.size());
     }
 }

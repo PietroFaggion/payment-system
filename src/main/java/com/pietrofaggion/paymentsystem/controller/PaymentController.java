@@ -12,11 +12,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.security.Principal;
 
+@Slf4j
 @RestController
 @RequestMapping("/payments")
 @RequiredArgsConstructor
@@ -45,9 +48,17 @@ public class PaymentController {
             @ApiResponse(responseCode = "409", description = "Duplicate idempotency key or concurrent modification", content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "422", description = "Insufficient funds or currency mismatch", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public ResponseEntity<PaymentResponseDto> createPayment(@Valid @RequestBody PaymentRequestDto request) {
+    public ResponseEntity<PaymentResponseDto> createPayment(Principal principal,
+                                                            @Valid @RequestBody PaymentRequestDto request) {
+        log.info("POST /payments user={} sender={} receiver={} amount={} currency={} key={}",
+                principal.getName(), request.getSenderAccountId(), request.getReceiverAccountId(),
+                request.getAmount(), request.getCurrency(), request.getIdempotencyKey());
+
         PaymentResponseDto response = paymentService.createPayment(request);
         URI location = URI.create("/payments/" + response.getTransactionId());
+
+        log.info("POST /payments completed user={} transactionId={} status={}",
+                principal.getName(), response.getTransactionId(), response.getStatus());
         return ResponseEntity.created(location).body(response);
     }
 
@@ -63,7 +74,9 @@ public class PaymentController {
             @ApiResponse(responseCode = "200", description = "Transaction found"),
             @ApiResponse(responseCode = "404", description = "Transaction not found", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public ResponseEntity<PaymentResponseDto> getPayment(@PathVariable Long transactionId) {
+    public ResponseEntity<PaymentResponseDto> getPayment(Principal principal,
+                                                         @PathVariable Long transactionId) {
+        log.info("GET /payments/{} user={}", transactionId, principal.getName());
         return ResponseEntity.ok(paymentService.getPaymentById(transactionId));
     }
 }

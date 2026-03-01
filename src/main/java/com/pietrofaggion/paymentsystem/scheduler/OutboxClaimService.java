@@ -4,6 +4,7 @@ import com.pietrofaggion.paymentsystem.entity.NotificationOutbox;
 import com.pietrofaggion.paymentsystem.entity.OutboxStatus;
 import com.pietrofaggion.paymentsystem.repository.NotificationOutboxRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,7 @@ import java.util.List;
  * rows already locked by another instance are skipped, so each row is claimed
  * by exactly one instance.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OutboxClaimService {
@@ -39,6 +41,9 @@ public class OutboxClaimService {
         List<NotificationOutbox> rows = notificationOutboxRepository
                 .findPendingSkipLocked(OutboxStatus.PENDING, PageRequest.of(0, batchSize));
 
+        if (!rows.isEmpty()) {
+            log.debug("Claiming {} outbox row(s) - ids={}", rows.size(), rows.stream().map(NotificationOutbox::getId).toList());
+        }
         rows.forEach(r -> r.setStatus(OutboxStatus.PROCESSING));
         notificationOutboxRepository.saveAll(rows);
 

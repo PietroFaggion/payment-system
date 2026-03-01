@@ -15,6 +15,7 @@ import com.pietrofaggion.paymentsystem.repository.NotificationOutboxRepository;
 import com.pietrofaggion.paymentsystem.repository.TransactionRepository;
 import com.pietrofaggion.paymentsystem.service.PaymentService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
@@ -65,15 +67,15 @@ public class PaymentServiceImpl implements PaymentService {
         Transaction existing = transactionRepository.findByIdempotencyKey(request.getIdempotencyKey())
                 .orElse(null);
 
-        // the idea is to return an exception if a fraudulent attempt is made to reuse an idempotency key with different payment parameters,
-        //  but allow repeated requests with exactly the same parameters to succeed without creating duplicate transactions
         if (existing != null) {
             if (!existing.getSenderAccount().getId().equals(request.getSenderAccountId())
                     || !existing.getReceiverAccount().getId().equals(request.getReceiverAccountId())
                     || existing.getAmount().compareTo(request.getAmount()) != 0
                     || !existing.getCurrency().equals(request.getCurrency())) {
+                log.warn("Idempotency conflict - key={} reused with different parameters", request.getIdempotencyKey());
                 throw new IdempotencyConflictException();
             }
+            log.info("Idempotency hit - key={} returning existing transactionId={}", request.getIdempotencyKey(), existing.getId());
             return toResponse(existing);
         }
 
@@ -127,6 +129,8 @@ public class PaymentServiceImpl implements PaymentService {
         outbox.setRetryCount(0);
         notificationOutboxRepository.save(outbox);
 
+        log.info("Payment created - transactionId={} sender={} receiver={} amount={} currency={}",
+                savedTransaction.getId(), senderId, receiverId, request.getAmount(), request.getCurrency());
         return toResponse(savedTransaction);
     }
 
